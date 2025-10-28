@@ -251,6 +251,65 @@ X-RateLimit-Reset: 1635438000
 
 ## Troubleshooting
 
+### Plugin Deactivated After Update - "Plugin file does not exist"
+
+**Problem**: After updating from GitHub, WordPress says "Plugin file does not exist" and deactivates the plugin.
+
+**Cause**: GitHub's zipball creates a folder with a commit hash (e.g., `amitjha329-floating-action-button-abc123`), but WordPress expects the folder to be named `floating-action-button`.
+
+**Solution (This is now fixed automatically):**
+
+The updater now includes two methods to handle this:
+1. `fix_source_folder()` - Renames the folder BEFORE installation
+2. `post_install()` - Verifies correct folder name AFTER installation
+
+**Manual Recovery (if you're currently experiencing this issue):**
+
+Via FTP/File Manager:
+1. Go to `/wp-content/plugins/`
+2. Look for a folder like `amitjha329-floating-action-button-{hash}`
+3. Rename it to `floating-action-button`
+4. Go to WordPress admin → Plugins
+5. Reactivate the plugin
+
+Via WordPress admin:
+1. Delete the broken plugin (don't worry, settings are saved in database)
+2. Re-upload the plugin manually
+3. Or wait for the fix and update again
+
+**Prevention:**
+Make sure you're using the latest version of the updater class which includes both:
+- `upgrader_source_selection` filter (line ~103)
+- `upgrader_post_install` filter (line ~104)
+
+### Conflicts with WordPress.org Plugins
+
+**Problem**: WordPress shows update from WordPress.org repository instead of GitHub (e.g., showing version from a different plugin with same/similar name)
+
+**Solution:**
+
+This is fixed in the updater class. The updater now automatically:
+- Disables WordPress.org update checks for this plugin
+- Prevents slug conflicts with plugins on WordPress.org
+- Ensures only GitHub releases are shown for updates
+
+**How it works:**
+```php
+// The updater filters HTTP requests to WordPress.org API
+// and removes this plugin from WordPress.org update checks
+add_filter('http_request_args', array($this, 'disable_wporg_update'), 10, 2);
+```
+
+**If the issue persists:**
+1. Clear WordPress update cache:
+   ```php
+   delete_site_transient('update_plugins');
+   ```
+
+2. Check that the updater is properly initialized
+3. Deactivate and reactivate the plugin
+4. Verify you're on the latest version of the updater class
+
 ### Update Not Showing
 
 **Problem**: New GitHub release exists, but no update notification

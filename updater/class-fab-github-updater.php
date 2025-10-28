@@ -102,6 +102,10 @@ class FAB_Github_Updater {
         add_filter('pre_set_site_transient_update_plugins', array($this, 'check_for_update'));
         add_filter('plugins_api', array($this, 'plugin_info'), 20, 3);
         add_filter('upgrader_post_install', array($this, 'post_install'), 10, 3);
+        add_filter('upgrader_source_selection', array($this, 'fix_source_folder'), 10, 4);
+        
+        // Disable WordPress.org updates for this plugin (prevent conflicts)
+        add_filter('http_request_args', array($this, 'disable_wporg_update'), 10, 2);
         
         // Add custom update message
         add_action('in_plugin_update_message-' . $this->plugin_basename, array($this, 'update_message'), 10, 2);
@@ -347,43 +351,134 @@ class FAB_Github_Updater {
     }
 
     /**
+     * Fix the source folder name from GitHub zipball
+     * 
+     * GitHub creates a folder like "username-repo-commitsha", but WordPress
+     * expects the plugin folder name. This renames it before installation.
+     * 
+     * @param string      $source        Source folder path
+     * @param string      $remote_source Remote source path
+     * @param WP_Upgrader $upgrader      Upgrader instance
+     * @param array       $hook_extra    Extra hook data
+     * @return string|WP_Error Modified source path or error
+     */
+    public function fix_source_folder($source, $remote_source, $upgrader, $hook_extra = array()) {
+        global $wp_filesystem;
+
+        // Check if this is our plugin
+        if (!isset($hook_extra['plugin']) || $hook_extra['plugin'] !== $this->plugin_basename) {
+            return $source;
+        }
+
+        // Get the expected folder name
+        $expected_slug = dirname($this->plugin_basename);
+        
+        // Get the current folder name from source
+        $source_files = $wp_filesystem->dirlist($remote_source);
+        
+        if (!is_array($source_files) || count($source_files) !== 1) {
+            return $source;
+        }
+
+        // Get the actual folder name that GitHub created
+        $actual_slug = key($source_files);
+        
+        // If they match, we're good
+        if ($actual_slug === $expected_slug) {
+            return $source;
+        }
+
+        // Rename the folder to expected name
+        $new_source = trailingslashit($remote_source) . $expected_slug;
+        
+        if ($wp_filesystem->move($source, $new_source)) {
+            return $new_source;
+        }
+
+        return new WP_Error('rename_failed', __('Unable to rename plugin folder.'));
+    }
+
+    /**
      * Post-install hook to rename the plugin folder
      * 
      * GitHub's zipball comes with a folder name like "username-repo-commit",
      * but we need it to be the plugin slug.
      * 
-     * @param bool  $true       Always true
+     * @param bool  $response   Installation response
      * @param array $hook_extra Extra hook data
      * @param array $result     Installation result
      * @return bool
      */
-    public function post_install($true, $hook_extra, $result) {
+    public function post_install($response, $hook_extra, $result) {
         global $wp_filesystem;
 
-        // Check if this is our plugin
+        // Check if this is our plugin being updated
         if (!isset($hook_extra['plugin']) || $hook_extra['plugin'] !== $this->plugin_basename) {
-            return $true;
+            return $response;
         }
 
-        // Get the plugin directory
-        $plugin_folder = WP_PLUGIN_DIR . DIRECTORY_SEPARATOR . dirname($this->plugin_basename);
+        // Get the expected plugin directory name
+        $proper_destination = WP_PLUGIN_DIR . '/' . dirname($this->plugin_basename);
         
-        // Move to correct location if needed
-        if (isset($result['destination']) && $result['destination'] !== $plugin_folder) {
-            // Remove old directory if exists
-            if ($wp_filesystem->is_dir($plugin_folder)) {
-                $wp_filesystem->delete($plugin_folder, true);
+        // Get the current destination (where GitHub extracted to)
+        $current_destination = isset($result['destination']) ? $result['destination'] : false;
+        
+        if (!$current_destination) {
+            return $response;
+        }
+
+        // If they're different, we need to rename
+        if ($current_destination !== $proper_destination) {
+            // Initialize WP_Filesystem if not already done
+            if (!isset($wp_filesystem) || !is_object($wp_filesystem)) {
+                WP_Filesystem();
             }
 
-            // Move to correct location
-            $wp_filesystem->move($result['destination'], $plugin_folder);
-            $result['destination'] = $plugin_folder;
+            // Remove old plugin directory if it exists
+            if ($wp_filesystem->is_dir($proper_destination)) {
+                $wp_filesystem->delete($proper_destination, true);
+            }
+
+            // Move from GitHub's folder name to proper plugin folder name
+            $moved = $wp_filesystem->move($current_destination, $proper_destination);
+            
+            if ($moved) {
+                $result['destination'] = $proper_destination;
+                $result['destination_name'] = dirname($this->plugin_basename);
+            }
         }
 
         // Clear cache
         delete_transient($this->cache_key);
 
-        return $true;
+        return $response;
+    }
+
+    /**
+     * Disable WordPress.org update checks for this plugin
+     * 
+     * Prevents conflicts with plugins that have similar names on WordPress.org
+     * 
+     * @param array  $args HTTP request args
+     * @param string $url  Request URL
+     * @return array Modified args
+     */
+    public function disable_wporg_update($args, $url) {
+        // Check if this is a WordPress.org API request
+        if (strpos($url, 'api.wordpress.org') !== false) {
+            // Check if plugins are being checked
+            if (isset($args['body']['plugins'])) {
+                $plugins = json_decode($args['body']['plugins'], true);
+                
+                // Remove our plugin from the check
+                if (isset($plugins['plugins'][$this->plugin_basename])) {
+                    unset($plugins['plugins'][$this->plugin_basename]);
+                    $args['body']['plugins'] = json_encode($plugins);
+                }
+            }
+        }
+        
+        return $args;
     }
 
     /**
