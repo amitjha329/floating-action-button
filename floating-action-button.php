@@ -3,7 +3,7 @@
  * Plugin Name: Floating Action Button
  * Plugin URI: https://example.com/floating-action-button
  * Description: A customizable floating action button for your WordPress site with support for WhatsApp, social media, and custom icons.
- * Version: 1.1.0
+ * Version: 1.1.1
  * Author: Your Name
  * Author URI: https://example.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('FAB_VERSION', '1.1.0');
+define('FAB_VERSION', '1.1.1');
 define('FAB_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('FAB_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('FAB_PLUGIN_BASENAME', plugin_basename(__FILE__));
