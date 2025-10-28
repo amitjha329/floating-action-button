@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: Floating Action Button
- * Plugin URI: https://example.com/floating-action-button
+ * Plugin URI: https://github.com/amitjha329/floating-action-button
  * Description: A customizable floating action button for your WordPress site with support for WhatsApp, social media, and custom icons.
  * Version: 1.1.1
- * Author: Your Name
- * Author URI: https://example.com
+ * Author: Yash Jha
+ * Author URI: https://yashjha.dev
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: floating-action-button
@@ -414,7 +414,41 @@ function fab_init() {
 }
 add_action('init', 'fab_init');
 
-// Initialize the GitHub updater
+// Initialize the GitHub updater (must run early to hook into update checks)
 if (is_admin()) {
-    new FAB_Github_Updater(FAB_PLUGIN_FILE, FAB_GITHUB_USERNAME, FAB_GITHUB_REPO);
+    // Initialize immediately, not on a hook, to ensure update filters are registered early
+    $GLOBALS['fab_updater'] = new FAB_Github_Updater(FAB_PLUGIN_FILE, FAB_GITHUB_USERNAME, FAB_GITHUB_REPO);
+    
+    // Add debug action (add ?fab_debug_update=1 to any admin URL to see debug info)
+    if (isset($_GET['fab_debug_update']) && current_user_can('manage_options')) {
+        add_action('admin_notices', function() {
+            if (isset($GLOBALS['fab_updater'])) {
+                $debug = $GLOBALS['fab_updater']->get_debug_info();
+                echo '<div class="notice notice-info"><pre style="overflow: auto;">';
+                echo '<strong>FAB GitHub Updater Debug Info:</strong>' . "\n\n";
+                print_r($debug);
+                echo '</pre></div>';
+            }
+        });
+    }
+    
+    // Add force check action (add ?fab_force_check=1 to clear cache and check for updates)
+    if (isset($_GET['fab_force_check']) && current_user_can('manage_options')) {
+        add_action('admin_init', function() {
+            if (isset($GLOBALS['fab_updater'])) {
+                $GLOBALS['fab_updater']->clear_cache();
+                delete_site_transient('update_plugins');
+                wp_redirect(admin_url('plugins.php?fab_check_done=1'));
+                exit;
+            }
+        });
+    }
+    
+    // Show confirmation message after force check
+    if (isset($_GET['fab_check_done'])) {
+        add_action('admin_notices', function() {
+            echo '<div class="notice notice-success is-dismissible"><p><strong>Update cache cleared!</strong> WordPress will check for updates on next page load.</p></div>';
+        });
+    }
 }
+

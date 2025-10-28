@@ -501,4 +501,38 @@ class FAB_Github_Updater {
     public function clear_cache() {
         delete_transient($this->cache_key);
     }
+
+    /**
+     * Get debug information about update status
+     * 
+     * @return array Debug information
+     */
+    public function get_debug_info() {
+        $current_version = $this->get_plugin_version();
+        $release_data = $this->fetch_github_release();
+        
+        $debug = array(
+            'plugin_file' => $this->plugin_file,
+            'plugin_basename' => $this->plugin_basename,
+            'plugin_slug' => $this->plugin_slug,
+            'current_version' => $current_version,
+            'github_api_url' => $this->github_api_url,
+            'cache_key' => $this->cache_key,
+            'cached_data' => get_transient($this->cache_key),
+            'fresh_data' => $release_data,
+        );
+        
+        if ($release_data && is_object($release_data)) {
+            $new_version = isset($release_data->tag_name) ? $release_data->tag_name : false;
+            if ($new_version && substr($new_version, 0, 1) === 'v') {
+                $new_version = substr($new_version, 1);
+            }
+            $debug['github_version'] = $new_version;
+            $debug['update_available'] = version_compare($current_version, $new_version, '<');
+        } else {
+            $debug['error'] = 'Could not fetch release data from GitHub';
+        }
+        
+        return $debug;
+    }
 }
