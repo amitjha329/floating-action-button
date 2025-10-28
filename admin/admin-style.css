@@ -1,0 +1,61 @@
+/* Admin Styles for Floating Action Button Settings Page */
+
+.fab-info-box {
+    margin-top: 30px;
+    padding: 20px;
+    background: #fff;
+    border-left: 4px solid #2271b1;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+
+.fab-info-box h2 {
+    margin-top: 0;
+    font-size: 18px;
+}
+
+.fab-info-box h3 {
+    font-size: 16px;
+    margin-top: 20px;
+}
+
+.fab-info-box ul,
+.fab-info-box ol {
+    margin-left: 20px;
+}
+
+.fab-info-box li {
+    margin-bottom: 8px;
+    line-height: 1.6;
+}
+
+#fab_icon_preview {
+    margin-top: 10px;
+    padding: 10px;
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+#fab_icon_preview img {
+    display: block;
+}
+
+#fab_upload_icon_button {
+    margin-left: 10px;
+}
+
+#fab_custom_icon_wrapper {
+    max-width: 600px;
+}
+
+.form-table th {
+    width: 200px;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 782px) {
+    .form-table th {
+        width: auto;
+    }
+}
