@@ -8,6 +8,8 @@ A complete, customizable WordPress plugin that adds a floating action button to 
 - **Custom Icon Upload**: Upload your own PNG icons via WordPress Media Library
 - **WhatsApp Auto-Link Generation**: Automatically create wa.me links with phone number and pre-filled message
 - **Flexible Positioning**: Choose from Bottom Right, Bottom Left, Top Right, or Top Left
+- **GitHub Auto-Updates**: Automatic plugin updates from GitHub repository
+- **Automated Releases**: GitHub Actions workflows for easy version management
 - **Fully Responsive**: Optimized for desktop, tablet, and mobile devices
 - **Accessibility Ready**: Includes focus states and reduced-motion support
 - **Translation Ready**: Full i18n support with text domain
@@ -81,8 +83,28 @@ floating-action-button/
 ├── public/
 │   ├── frontend-logic.js         # Frontend JavaScript
 │   └── frontend-style.css        # Frontend styles
+├── updater/
+│   └── class-fab-github-updater.php  # GitHub auto-updater
 └── README.md                     # This file
 ```
+
+## Automatic Updates
+
+This plugin includes a GitHub-based automatic update system. When new versions are released on GitHub, users will see update notifications in their WordPress dashboard and can update with one click.
+
+**For detailed information about the update system, see [GITHUB-UPDATER.md](GITHUB-UPDATER.md)**
+
+## Release Automation
+
+The plugin includes GitHub Actions workflows for automated release management:
+
+- **Manual Release Workflow**: Create releases with automatic version bumping (patch/minor/major) directly from GitHub UI
+- **Automatic Release on Tag**: Automatically create releases when version tags are pushed
+
+These workflows handle version bumping, changelog updates, git tagging, and GitHub release creation automatically.
+
+**For detailed information about release automation, see [GITHUB-ACTIONS.md](GITHUB-ACTIONS.md)**
+**Quick start guide: [GITHUB-ACTIONS-QUICK.md](GITHUB-ACTIONS-QUICK.md)**
 
 ## Technical Details
 
@@ -98,6 +120,8 @@ floating-action-button/
 - `admin_init`: Register settings
 - `admin_enqueue_scripts`: Load admin assets
 - `wp_enqueue_scripts`: Load frontend assets
+- `pre_set_site_transient_update_plugins`: Check for updates
+- `plugins_api`: Display plugin information
 
 ### Security Features
 - Nonce verification for form submissions

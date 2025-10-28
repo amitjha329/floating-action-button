@@ -1,0 +1,99 @@
+name: Auto Release on Tag
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          # Remove 'v' prefix from tag
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Get previous tag
+        id: previous_tag
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          echo "tag=$PREV_TAG" >> $GITHUB_OUTPUT
+          echo "Previous tag: $PREV_TAG"
+
+      - name: Generate changelog from commits
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PREV_TAG="${{ steps.previous_tag.outputs.tag }}"
+          
+          if [ -n "$PREV_TAG" ]; then
+            echo "## What's Changed in v$VERSION" > /tmp/release_notes.md
+            echo "" >> /tmp/release_notes.md
+            
+            # Get commits since last tag, grouped by type
+            echo "### 🚀 Features" >> /tmp/release_notes.md
+            git log $PREV_TAG..HEAD --pretty=format:"%s" --no-merges | grep -i "^feat\|^add" | sed 's/^/- /' >> /tmp/release_notes.md || echo "- No new features" >> /tmp/release_notes.md
+            echo "" >> /tmp/release_notes.md
+            
+            echo "### 🐛 Bug Fixes" >> /tmp/release_notes.md
+            git log $PREV_TAG..HEAD --pretty=format:"%s" --no-merges | grep -i "^fix\|^bug" | sed 's/^/- /' >> /tmp/release_notes.md || echo "- No bug fixes" >> /tmp/release_notes.md
+            echo "" >> /tmp/release_notes.md
+            
+            echo "### 🔧 Improvements" >> /tmp/release_notes.md
+            git log $PREV_TAG..HEAD --pretty=format:"%s" --no-merges | grep -i "^improve\|^update\|^refactor" | sed 's/^/- /' >> /tmp/release_notes.md || echo "- No improvements" >> /tmp/release_notes.md
+            echo "" >> /tmp/release_notes.md
+            
+            echo "### 📝 Other Changes" >> /tmp/release_notes.md
+            git log $PREV_TAG..HEAD --pretty=format:"%s" --no-merges | grep -vi "^feat\|^add\|^fix\|^bug\|^improve\|^update\|^refactor" | sed 's/^/- /' >> /tmp/release_notes.md || echo "- No other changes" >> /tmp/release_notes.md
+            echo "" >> /tmp/release_notes.md
+            
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$PREV_TAG...v$VERSION" >> /tmp/release_notes.md
+          else
+            echo "## Initial Release v$VERSION" > /tmp/release_notes.md
+            echo "" >> /tmp/release_notes.md
+            echo "First release of the Floating Action Button plugin!" >> /tmp/release_notes.md
+          fi
+          
+          cat /tmp/release_notes.md
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Version ${{ steps.version.outputs.version }}
+          body_path: /tmp/release_notes.md
+          draft: false
+          prerelease: false
+
+      - name: Release Summary
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          echo "## 🎉 Release v$VERSION Created!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The release has been published and is now available." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 What Happens Next?" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. **WordPress sites** with the plugin will check for updates" >> $GITHUB_STEP_SUMMARY
+          echo "2. **Update notifications** will appear in their admin dashboard" >> $GITHUB_STEP_SUMMARY
+          echo "3. **Users can update** with a single click!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- [View Release](https://github.com/${{ github.repository }}/releases/tag/v$VERSION)" >> $GITHUB_STEP_SUMMARY
+          echo "- [All Releases](https://github.com/${{ github.repository }}/releases)" >> $GITHUB_STEP_SUMMARY

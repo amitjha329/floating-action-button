@@ -1,0 +1,206 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: 'patch'
+      release_notes:
+        description: 'Release notes (optional - will use commits if empty)'
+        required: false
+        type: string
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Get current version
+        id: current_version
+        run: |
+          # Extract version from main plugin file
+          CURRENT_VERSION=$(grep -oP "define\('FAB_VERSION', '\K[0-9]+\.[0-9]+\.[0-9]+" floating-action-button.php)
+          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Calculate new version
+        id: new_version
+        run: |
+          CURRENT="${{ steps.current_version.outputs.current }}"
+          BUMP_TYPE="${{ github.event.inputs.version_bump }}"
+          
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          
+          if [ "$BUMP_TYPE" = "major" ]; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+          elif [ "$BUMP_TYPE" = "minor" ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+          
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Update version in files
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          
+          # Update main plugin file - version constant
+          sed -i "s/define('FAB_VERSION', '[0-9.]*')/define('FAB_VERSION', '$NEW_VERSION')/" floating-action-button.php
+          
+          # Update main plugin file - header version
+          sed -i "s/\* Version: [0-9.]*/\* Version: $NEW_VERSION/" floating-action-button.php
+          
+          echo "Updated version to $NEW_VERSION in plugin files"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          CURRENT_VERSION="${{ steps.current_version.outputs.current }}"
+          
+          # Get custom release notes or generate from commits
+          if [ -n "${{ github.event.inputs.release_notes }}" ]; then
+            echo "${{ github.event.inputs.release_notes }}" > /tmp/release_notes.md
+          else
+            # Get commits since last tag
+            LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            
+            echo "## What's Changed" > /tmp/release_notes.md
+            echo "" >> /tmp/release_notes.md
+            
+            if [ -n "$LAST_TAG" ]; then
+              git log $LAST_TAG..HEAD --pretty=format:"- %s" --no-merges >> /tmp/release_notes.md
+            else
+              git log --pretty=format:"- %s" --no-merges | head -20 >> /tmp/release_notes.md
+            fi
+            
+            echo "" >> /tmp/release_notes.md
+            echo "" >> /tmp/release_notes.md
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/v$CURRENT_VERSION...v$NEW_VERSION" >> /tmp/release_notes.md
+          fi
+          
+          # Output for display
+          echo "Generated changelog:"
+          cat /tmp/release_notes.md
+
+      - name: Update CHANGELOG.md
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          CURRENT_DATE=$(date +%Y-%m-%d)
+          BUMP_TYPE="${{ github.event.inputs.version_bump }}"
+          
+          # Create new changelog entry header
+          echo "## [$NEW_VERSION] - $CURRENT_DATE" > /tmp/new_entry.md
+          echo "" >> /tmp/new_entry.md
+          
+          # Add section based on bump type
+          if [ "$BUMP_TYPE" = "major" ]; then
+            echo "### Changed" >> /tmp/new_entry.md
+            echo "- Major version update with breaking changes" >> /tmp/new_entry.md
+          elif [ "$BUMP_TYPE" = "minor" ]; then
+            echo "### Added" >> /tmp/new_entry.md
+            echo "- New features and improvements" >> /tmp/new_entry.md
+          else
+            echo "### Fixed" >> /tmp/new_entry.md
+            echo "- Bug fixes and minor improvements" >> /tmp/new_entry.md
+          fi
+          
+          # Add custom notes if provided
+          if [ -n "${{ github.event.inputs.release_notes }}" ]; then
+            echo "" >> /tmp/new_entry.md
+            echo "${{ github.event.inputs.release_notes }}" >> /tmp/new_entry.md
+          fi
+          
+          echo "" >> /tmp/new_entry.md
+          echo "---" >> /tmp/new_entry.md
+          echo "" >> /tmp/new_entry.md
+          
+          # Insert new entry at the top of CHANGELOG.md (after the header)
+          if [ -f CHANGELOG.md ]; then
+            # Find the line number where to insert (after "# Changelog" and initial description)
+            LINE_NUM=$(grep -n "^## \[" CHANGELOG.md | head -1 | cut -d: -f1)
+            if [ -n "$LINE_NUM" ]; then
+              head -n $((LINE_NUM - 1)) CHANGELOG.md > /tmp/changelog_top.md
+              cat /tmp/new_entry.md > /tmp/changelog_new.md
+              tail -n +$LINE_NUM CHANGELOG.md >> /tmp/changelog_new.md
+              cat /tmp/changelog_top.md /tmp/changelog_new.md > CHANGELOG.md
+            else
+              cat /tmp/new_entry.md CHANGELOG.md > /tmp/changelog_new.md
+              mv /tmp/changelog_new.md CHANGELOG.md
+            fi
+          fi
+          
+          echo "Updated CHANGELOG.md"
+
+      - name: Commit version bump
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          
+          git add floating-action-button.php CHANGELOG.md
+          git commit -m "Bump version to $NEW_VERSION"
+          git push origin main
+          
+          echo "Committed and pushed version bump"
+
+      - name: Create Git tag
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          
+          git tag -a "v$NEW_VERSION" -m "Release version $NEW_VERSION"
+          git push origin "v$NEW_VERSION"
+          
+          echo "Created and pushed tag v$NEW_VERSION"
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          
+          gh release create "v$NEW_VERSION" \
+            --title "Version $NEW_VERSION" \
+            --notes-file /tmp/release_notes.md
+
+      - name: Summary
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          CURRENT_VERSION="${{ steps.current_version.outputs.current }}"
+          
+          echo "## Release Created Successfully! 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Previous Version**: $CURRENT_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- **New Version**: $NEW_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bump Type**: ${{ github.event.inputs.version_bump }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. WordPress sites will check for updates within 2 hours" >> $GITHUB_STEP_SUMMARY
+          echo "2. Users will see update notification in their admin dashboard" >> $GITHUB_STEP_SUMMARY
+          echo "3. They can update with one click!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Release URL**: https://github.com/${{ github.repository }}/releases/tag/v$NEW_VERSION" >> $GITHUB_STEP_SUMMARY

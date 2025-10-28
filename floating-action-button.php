@@ -22,6 +22,14 @@ define('FAB_VERSION', '1.0.0');
 define('FAB_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('FAB_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('FAB_PLUGIN_BASENAME', plugin_basename(__FILE__));
+define('FAB_PLUGIN_FILE', __FILE__);
+
+// GitHub updater configuration
+define('FAB_GITHUB_USERNAME', 'amitjha329'); // Your GitHub username
+define('FAB_GITHUB_REPO', 'floating-action-button'); // Your repository name
+
+// Include the GitHub updater
+require_once FAB_PLUGIN_DIR . 'updater/class-fab-github-updater.php';
 
 /**
  * Main Floating Action Button Class
@@ -405,3 +413,8 @@ function fab_init() {
     new Floating_Action_Button();
 }
 add_action('init', 'fab_init');
+
+// Initialize the GitHub updater
+if (is_admin()) {
+    new FAB_Github_Updater(FAB_PLUGIN_FILE, FAB_GITHUB_USERNAME, FAB_GITHUB_REPO);
+}

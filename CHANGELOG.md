@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Telegram
   - Custom icon upload
 - WordPress Media Library integration for custom icons
+- **GitHub-based automatic update system**
+  - Checks GitHub repository for new releases
+  - Displays update notifications in WordPress admin
+  - One-click update from dashboard
+  - Changelog display in "View details" modal
+  - Cached API requests to prevent rate limiting
 - WhatsApp special features:
   - Toggle for automatic wa.me link generation
   - Phone number input field
